@@ -46,7 +46,7 @@ export default class Server {
 
   async start() {
     const runningServers: http.Server[] = [];
-    if (!config.IS_DEV || !config.IS_OPAMP_ONLY) {
+    if (!(config.IS_DEV && !config.IS_OPAMP_ONLY)) {
       this.appServer = this.createAppServer();
       this.appServer.keepAliveTimeout = 61000; // Ensure all inactive connections are terminated by the ALB, by setting this a few seconds higher than the ALB idle timeout
       this.appServer.headersTimeout = 62000; // Ensure the headersTimeout is set higher than the keepAliveTimeout due to this nodejs regression bug: https://github.com/nodejs/node/issues/27363
