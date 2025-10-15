@@ -43,6 +43,7 @@ import {
   Flex,
   Grid,
   Group,
+  Input,
   Menu,
   Modal,
   Paper,
@@ -55,12 +56,11 @@ import {
   useDocumentVisibility,
 } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { useIsFetching } from '@tanstack/react-query';
+import { keepPreviousData, useIsFetching } from '@tanstack/react-query';
+import { SortingState } from '@tanstack/react-table';
 import CodeMirror from '@uiw/react-codemirror';
 
 import { ContactSupportText } from '@/components/ContactSupportText';
-import DBDeltaChart from '@/components/DBDeltaChart';
-import DBHeatmapChart from '@/components/DBHeatmapChart';
 import { DBSearchPageFilters } from '@/components/DBSearchPageFilters';
 import { DBTimeChart } from '@/components/DBTimeChart';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -75,10 +75,7 @@ import { Tags } from '@/components/Tags';
 import { TimePicker } from '@/components/TimePicker';
 import WhereLanguageControlled from '@/components/WhereLanguageControlled';
 import { IS_LOCAL_MODE } from '@/config';
-import {
-  useAliasMapFromChartConfig,
-  useQueriedChartConfig,
-} from '@/hooks/useChartConfig';
+import { useAliasMapFromChartConfig } from '@/hooks/useChartConfig';
 import { useExplainQuery } from '@/hooks/useExplainQuery';
 import { withAppNav } from '@/layout';
 import {
@@ -90,7 +87,6 @@ import {
 import { useSearchPageFilterState } from '@/searchFilters';
 import SearchInputV2 from '@/SearchInputV2';
 import {
-  getDurationMsExpression,
   getFirstTimestampValueExpression,
   useSource,
   useSources,
@@ -101,10 +97,14 @@ import { QUERY_LOCAL_STORAGE, useLocalStorage, usePrevious } from '@/utils';
 import { SQLPreview } from './components/ChartSQLPreview';
 import DBSqlRowTableWithSideBar from './components/DBSqlRowTableWithSidebar';
 import PatternTable from './components/PatternTable';
+import { DBSearchHeatmapChart } from './components/Search/DBSearchHeatmapChart';
 import SourceSchemaPreview from './components/SourceSchemaPreview';
 import { useTableMetadata } from './hooks/useMetadata';
 import { useSqlSuggestions } from './hooks/useSqlSuggestions';
-import { parseAsStringWithNewLines } from './utils/queryParsers';
+import {
+  parseAsSortingStateString,
+  parseAsStringWithNewLines,
+} from './utils/queryParsers';
 import api from './api';
 import { LOCAL_STORE_CONNECTIONS_KEY } from './connection';
 import { DBSearchPageAlertModal } from './DBSearchPageAlertModal';
@@ -1098,7 +1098,10 @@ function DBSearchPage() {
     }
   }, [isReady, queryReady, isChartConfigLoading, onSearch]);
 
-  const { data: aliasMap } = useAliasMapFromChartConfig(dbSqlRowTableConfig);
+  const { data: aliasMap } = useAliasMapFromChartConfig(dbSqlRowTableConfig, {
+    placeholderData: keepPreviousData,
+    queryKey: ['aliasMap', dbSqlRowTableConfig, 'withPlaceholder'],
+  });
 
   const aliasWith = useMemo(
     () =>
@@ -1155,6 +1158,24 @@ function DBSearchPage() {
     [onSubmit],
   );
 
+  const onSortingChange = useCallback(
+    (sortState: SortingState | null) => {
+      setIsLive(false);
+      const sort = sortState?.at(0);
+      setSearchedConfig({
+        orderBy: sort
+          ? `${sort.id} ${sort.desc ? 'DESC' : 'ASC'}`
+          : defaultOrderBy,
+      });
+    },
+    [setIsLive, defaultOrderBy, setSearchedConfig],
+  );
+  // Parse the orderBy string into a SortingState. We need the string
+  // version in other places so we keep this parser separate.
+  const orderByConfig = parseAsSortingStateString.parse(
+    searchedConfig.orderBy ?? '',
+  );
+
   const handleTimeRangeSelect = useCallback(
     (d1: Date, d2: Date) => {
       onTimeRangeSelect(d1, d2);
@@ -1204,7 +1225,11 @@ function DBSearchPage() {
         />
       )}
       <OnboardingModal />
-      <form data-testid="search-form" onSubmit={onFormSubmit}>
+      <form
+        data-testid="search-form"
+        onSubmit={onFormSubmit}
+        className={searchPageStyles.searchForm}
+      >
         {/* <DevTool control={control} /> */}
         <Flex gap="sm" px="sm" pt="sm" wrap="nowrap">
           <Group gap="4px" wrap="nowrap">
@@ -1475,7 +1500,6 @@ function DBSearchPage() {
       )}
       <Flex
         direction="column"
-        mt="sm"
         style={{ overflow: 'hidden', height: '100%' }}
         className="bg-hdx-dark"
       >
@@ -1513,12 +1537,8 @@ function DBSearchPage() {
               {analysisMode === 'pattern' &&
                 histogramTimeChartConfig != null && (
                   <Flex direction="column" w="100%" gap="0px">
-                    <Box style={{ height: 20, minHeight: 20 }} p="xs" pb="md">
-                      <Group
-                        justify="space-between"
-                        mb={4}
-                        style={{ width: '100%' }}
-                      >
+                    <Box className={searchPageStyles.searchStatsContainer}>
+                      <Group justify="space-between" style={{ width: '100%' }}>
                         <SearchTotalCountChart
                           config={histogramTimeChartConfig}
                           queryKeyPrefix={QUERY_KEY_PREFIX}
@@ -1533,12 +1553,7 @@ function DBSearchPage() {
                       </Group>
                     </Box>
                     {!hasQueryError && (
-                      <Box
-                        style={{ height: 120, minHeight: 120 }}
-                        p="xs"
-                        pb="md"
-                        mb="md"
-                      >
+                      <Box className={searchPageStyles.timeChartContainer}>
                         <DBTimeChart
                           sourceId={searchedConfig.source ?? undefined}
                           showLegend={false}
@@ -1567,89 +1582,55 @@ function DBSearchPage() {
                   </Flex>
                 )}
               {analysisMode === 'delta' && searchedSource != null && (
-                <Flex direction="column" w="100%">
-                  <div
-                    style={{ minHeight: 210, maxHeight: 210, width: '100%' }}
-                  >
-                    <DBHeatmapChart
-                      config={{
-                        ...chartConfig,
-                        select: [
-                          {
-                            aggFn: 'heatmap',
-                            valueExpression:
-                              getDurationMsExpression(searchedSource),
-                          },
-                        ],
-                        dateRange: searchedTimeRange,
-                        displayType: DisplayType.Heatmap,
-                        granularity: 'auto',
-                        with: aliasWith,
-                      }}
-                      enabled={isReady}
-                      onFilter={(xMin, xMax, yMin, yMax) => {
-                        setOutlierSqlCondition(
-                          [
-                            `${searchedSource.durationExpression} >= ${yMin} * 1e${(searchedSource.durationPrecision ?? 9) - 3}`,
-                            `${searchedSource.durationExpression} <= ${yMax} * 1e${(searchedSource.durationPrecision ?? 9) - 3}`,
-                            `${getFirstTimestampValueExpression(chartConfig.timestampValueExpression)} >= ${xMin}`,
-                            `${getFirstTimestampValueExpression(chartConfig.timestampValueExpression)} <= ${xMax}`,
-                          ].join(' AND '),
-                        );
-                      }}
-                    />
-                  </div>
-                  {outlierSqlCondition ? (
-                    <DBDeltaChart
-                      config={{
-                        ...chartConfig,
-                        dateRange: searchedTimeRange,
-                      }}
-                      outlierSqlCondition={outlierSqlCondition ?? ''}
-                    />
-                  ) : (
-                    <Paper shadow="xs" p="xl" h="100%">
-                      <Center mih={100} h="100%">
-                        <Text size="sm" c="gray.4">
-                          Please highlight an outlier range in the heatmap to
-                          view the delta chart.
-                        </Text>
-                      </Center>
-                    </Paper>
-                  )}
-                </Flex>
+                <DBSearchHeatmapChart
+                  chartConfig={{
+                    ...chartConfig,
+                    dateRange: searchedTimeRange,
+                    with: aliasWith,
+                  }}
+                  isReady={isReady}
+                  source={searchedSource}
+                />
               )}
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {analysisMode === 'results' &&
                   chartConfig &&
                   histogramTimeChartConfig && (
                     <>
-                      <Box style={{ height: 20, minHeight: 20 }} p="xs" pb="md">
+                      <Box className={searchPageStyles.searchStatsContainer}>
                         <Group
                           justify="space-between"
-                          mb={4}
                           style={{ width: '100%' }}
                         >
                           <SearchTotalCountChart
                             config={histogramTimeChartConfig}
                             queryKeyPrefix={QUERY_KEY_PREFIX}
                           />
-                          <SearchNumRows
-                            config={{
-                              ...chartConfig,
-                              dateRange: searchedTimeRange,
-                            }}
-                            enabled={isReady}
-                          />
+                          <Group gap="sm" align="center">
+                            {shouldShowLiveModeHint &&
+                              analysisMode === 'results' &&
+                              denoiseResults != true && (
+                                <Button
+                                  size="compact-xs"
+                                  variant="outline"
+                                  onClick={handleResumeLiveTail}
+                                >
+                                  <i className="bi text-success bi-lightning-charge-fill me-2" />
+                                  Resume Live Tail
+                                </Button>
+                              )}
+                            <SearchNumRows
+                              config={{
+                                ...chartConfig,
+                                dateRange: searchedTimeRange,
+                              }}
+                              enabled={isReady}
+                            />
+                          </Group>
                         </Group>
                       </Box>
                       {!hasQueryError && (
-                        <Box
-                          style={{ height: 120, minHeight: 120 }}
-                          p="xs"
-                          pb="md"
-                          mb="md"
-                        >
+                        <Box className={searchPageStyles.timeChartContainer}>
                           <DBTimeChart
                             sourceId={searchedConfig.source ?? undefined}
                             showLegend={false}
@@ -1781,31 +1762,6 @@ function DBSearchPage() {
                   </>
                 ) : (
                   <>
-                    {shouldShowLiveModeHint &&
-                      analysisMode === 'results' &&
-                      denoiseResults != true && (
-                        <div
-                          className="d-flex justify-content-center"
-                          style={{ height: 0 }}
-                        >
-                          <div
-                            style={{
-                              position: 'relative',
-                              top: -20,
-                              zIndex: 2,
-                            }}
-                          >
-                            <Button
-                              size="compact-xs"
-                              variant="outline"
-                              onClick={handleResumeLiveTail}
-                            >
-                              <i className="bi text-success bi-lightning-charge-fill me-2" />
-                              Resume Live Tail
-                            </Button>
-                          </div>
-                        </div>
-                      )}
                     {chartConfig &&
                       searchedConfig.source &&
                       dbSqlRowTableConfig &&
@@ -1831,6 +1787,8 @@ function DBSearchPage() {
                           onError={handleTableError}
                           denoiseResults={denoiseResults}
                           collapseAllRows={collapseAllRows}
+                          onSortingChange={onSortingChange}
+                          initialSortBy={orderByConfig ? [orderByConfig] : []}
                         />
                       )}
                   </>
