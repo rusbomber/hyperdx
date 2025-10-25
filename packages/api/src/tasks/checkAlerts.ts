@@ -67,6 +67,7 @@ const fireChannelEvent = async ({
   savedSearch,
   source,
   startTime,
+  state,
   totalCount,
   windowSizeInMins,
   teamWebhooksById,
@@ -82,6 +83,7 @@ const fireChannelEvent = async ({
   savedSearch?: ISavedSearch | null;
   source?: ISource | null;
   startTime: Date;
+  state: AlertState;
   totalCount: number;
   windowSizeInMins: number;
   teamWebhooksById: Map<string, IWebhook>;
@@ -133,6 +135,7 @@ const fireChannelEvent = async ({
     alertProvider,
     clickhouseClient,
     metadata,
+    state,
     title: buildAlertMessageTemplateTitle({
       template: alert.name,
       view: templateView,
@@ -350,6 +353,7 @@ export const processAlert = async (
               savedSearch: (details as any).savedSearch,
               source,
               startTime: bucketStart,
+              state: AlertState.ALERT,
               totalCount: _value,
               windowSizeInMins,
               teamWebhooksById,

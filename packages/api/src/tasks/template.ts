@@ -59,6 +59,7 @@ interface Message {
   hdxLink: string;
   title: string;
   body: string;
+  state: string;
 }
 
 export const notifyChannel = async ({
@@ -201,6 +202,7 @@ export const handleSendGenericWebhook = async (
     })({
       body: escapeJsonString(message.body),
       link: escapeJsonString(message.hdxLink),
+      state: message.state,
       title: escapeJsonString(message.title),
     });
   } catch (e) {
@@ -377,6 +379,7 @@ export const renderAlertTemplate = async ({
   alertProvider,
   clickhouseClient,
   metadata,
+  state,
   template,
   title,
   view,
@@ -385,6 +388,7 @@ export const renderAlertTemplate = async ({
   alertProvider: AlertProvider;
   clickhouseClient: ClickhouseClient;
   metadata: Metadata;
+  state: string;
   template?: string | null;
   title: string;
   view: AlertMessageTemplateDefaultView;
@@ -457,6 +461,7 @@ export const renderAlertTemplate = async ({
             hdxLink: buildAlertMessageTemplateHdxLink(alertProvider, view),
             title,
             body: renderedBody,
+            state,
           },
         });
       }
