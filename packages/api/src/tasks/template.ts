@@ -8,7 +8,11 @@ import {
   WebhookService,
   zAlertChannelType,
 } from '@hyperdx/common-utils/dist/types';
-import { _useTry, formatDate } from '@hyperdx/common-utils/dist/utils';
+import {
+  _useTry,
+  formatDate,
+  objectHash,
+} from '@hyperdx/common-utils/dist/utils';
 import { isValidSlackUrl } from '@hyperdx/common-utils/dist/validation';
 import Handlebars, { HelperOptions } from 'handlebars';
 import _ from 'lodash';
@@ -60,6 +64,9 @@ interface Message {
   title: string;
   body: string;
   state: string;
+  startTime: number;
+  endTime: number;
+  eventId: string;
 }
 
 export const notifyChannel = async ({
@@ -201,7 +208,10 @@ export const handleSendGenericWebhook = async (
       noEscape: true,
     })({
       body: escapeJsonString(message.body),
+      endTime: message.endTime,
+      eventId: message.eventId,
       link: escapeJsonString(message.hdxLink),
+      startTime: message.startTime,
       state: message.state,
       title: escapeJsonString(message.title),
     });
@@ -455,6 +465,14 @@ export const renderAlertTemplate = async ({
       );
 
       if (channel) {
+        const startTime = view.startTime.getTime();
+        const endTime = view.endTime.getTime();
+        const eventId = objectHash({
+          webhookId: alert.channel.webhookId,
+          startTime,
+          endTime,
+        });
+
         await notifyChannel({
           channel,
           message: {
@@ -462,6 +480,9 @@ export const renderAlertTemplate = async ({
             title,
             body: renderedBody,
             state,
+            startTime,
+            endTime,
+            eventId,
           },
         });
       }
