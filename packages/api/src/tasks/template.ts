@@ -468,7 +468,7 @@ export const renderAlertTemplate = async ({
         const startTime = view.startTime.getTime();
         const endTime = view.endTime.getTime();
         const eventId = objectHash({
-          webhookId: alert.channel.webhookId,
+          alertId: alert.id,
           startTime,
           endTime,
         });
