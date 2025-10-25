@@ -153,17 +153,6 @@ function validateWebhookUrl(
   }
 }
 
-const transformStateForService = (
-  state: string,
-  service: WebhookService,
-): string => {
-  if (service === WebhookService.IncidentIO) {
-    // Map AlertState to incident.io status
-    return state === 'ALERT' ? 'firing' : 'resolved';
-  }
-  return state;
-};
-
 export const handleSendSlackWebhook = async (
   webhook: IWebhook,
   message: Message,
@@ -218,6 +207,9 @@ export const handleSendGenericWebhook = async (
   let body = '';
   try {
     const handlebars = Handlebars.create();
+    // Register eq helper for conditional checks
+    handlebars.registerHelper('eq', (a, b) => a === b);
+
     body = handlebars.compile(webhook.body, {
       noEscape: true,
     })({
@@ -226,7 +218,7 @@ export const handleSendGenericWebhook = async (
       eventId: message.eventId,
       link: escapeJsonString(message.hdxLink),
       startTime: message.startTime,
-      state: transformStateForService(message.state, webhook.service),
+      state: message.state,
       title: escapeJsonString(message.title),
     });
   } catch (e) {
