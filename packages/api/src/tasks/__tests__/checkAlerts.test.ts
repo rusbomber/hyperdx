@@ -312,6 +312,7 @@ describe('checkAlerts', () => {
         alertProvider,
         clickhouseClient: {} as any,
         metadata: {} as any,
+        state: 'ALERT',
         template: 'Custom body @webhook-My_Web', // partial name should work
         view: {
           ...defaultSearchView,
@@ -350,6 +351,7 @@ describe('checkAlerts', () => {
         alertProvider,
         clickhouseClient: {} as any,
         metadata: {} as any,
+        state: 'ALERT',
         template: 'Custom body @webhook-My_Web', // partial name should work
         view: {
           ...defaultSearchView,
@@ -410,6 +412,7 @@ describe('checkAlerts', () => {
         alertProvider,
         clickhouseClient: {} as any,
         metadata: {} as any,
+        state: 'ALERT',
         template: 'Custom body @webhook-{{attributes.webhookName}}', // partial name should work
         view: {
           ...defaultSearchView,
@@ -481,6 +484,7 @@ describe('checkAlerts', () => {
         alertProvider,
         clickhouseClient: {} as any,
         metadata: {} as any,
+        state: 'ALERT',
         template: `
 {{#is_match "attributes.k8s.pod.name" "otel-collector-123"}}
   Runbook URL: {{attributes.runbook.url}}
@@ -518,6 +522,7 @@ describe('checkAlerts', () => {
         alertProvider,
         clickhouseClient: {} as any,
         metadata: {} as any,
+        state: 'ALERT',
         template:
           '{{#is_match "attributes.host" "web"}} @webhook-My_Web {{/is_match}}', // partial name should work
         view: {

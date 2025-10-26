@@ -475,6 +475,10 @@ export const renderAlertTemplate = async ({
         const endTime = view.endTime.getTime();
         const eventId = objectHash({
           alertId: alert.id,
+          channel: {
+            type: channel.type,
+            id: channel.channel._id.toString(),
+          },
         });
 
         await notifyChannel({
